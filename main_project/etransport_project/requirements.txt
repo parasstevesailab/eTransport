@@ -1,3 +1,9 @@
-# super_user: developer
-# password: 123456
+Django
+djangorestframework
+django-cors-headers
+django-filter
+djangorestframework-simplejwt
+Pillow
+python-dotenv
+mysqlclient
 

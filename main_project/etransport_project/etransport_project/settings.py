@@ -108,15 +108,14 @@ WSGI_APPLICATION = 'etransport_project.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'e_transport',
-        'USER': 'postgres',
-        'PASSWORD': '123456',
-        'HOST': 'localhost',  
-        'PORT': '5432', 
+        'ENGINE': 'django.db.backends.mysql',
+        'NAME': 'e_trans',
+        'USER': 'root',
+        'PASSWORD': '1234',
+        'HOST': 'localhost',  # Or your MySQL server's IP address
+        'PORT': '3306',
     }
 }
-
 AUTH_USER_MODEL = "accounts.CustomUser"
 
 
@@ -166,3 +165,6 @@ MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 AUTHENTICATION_BACKENDS = ['django.contrib.auth.backends.ModelBackend']
+
+# Optional: Add file upload settings
+FILE_UPLOAD_MAX_MEMORY_SIZE = 5242880

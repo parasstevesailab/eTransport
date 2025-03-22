@@ -1,5 +1,13 @@
 from rest_framework import serializers
 from .models import CustomUser
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated, IsAdminUser
+from rest_framework import status
+from .models import CustomUser, VehicleOwnerDocument, IndustrialOwnerDocument
+from rest_framework.parsers import MultiPartParser, FormParser
+from django.core.exceptions import ValidationError
+import imghdr
 
 class CustomUserSerializer(serializers.ModelSerializer):
     class Meta:
@@ -49,6 +57,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
         instance.save()
         return instance
     
+
 class VehicleOwnerSerializer(serializers.ModelSerializer):
     class Meta:
         model = CustomUser
@@ -58,6 +67,14 @@ class VehicleOwnerSerializer(serializers.ModelSerializer):
             'is_vehicle_owner', 'is_approved'
         ]
         read_only_fields = ['user_id', 'email', 'is_vehicle_owner', 'is_approved']
+
+
+
+class IndustrialOwnerSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CustomUser
+        fields = ['user_id', 'first_name', 'last_name', 'email', 'contact_no', 'company_name', 'company_address', 'company_reg_no', 'designation','is_vehicle_owner', 'is_approved']
+        read_only_fields = ['user_id', 'email', 'is_vehicle_owner', 'is_approved']  # Optional: Prevent updates to these fields
 
 class ApproveVehicleOwnerSerializer(serializers.ModelSerializer):
     approved_by = serializers.HiddenField(default=serializers.CurrentUserDefault())
@@ -72,4 +89,26 @@ class ApproveVehicleOwnerSerializer(serializers.ModelSerializer):
         return instance
 
 
+class VehicleOwnerDocumentSerializer(serializers.ModelSerializer):
+    document_image = serializers.ImageField(max_length=None, use_url=True)
+    
+    class Meta:
+        model = VehicleOwnerDocument
+        fields = ['id', 'document_type', 'document_image', 'uploaded_at', 'is_verified']
 
+class IndustrialOwnerDocumentSerializer(serializers.ModelSerializer):
+    document_image = serializers.ImageField(max_length=None, use_url=True)
+    
+    class Meta:
+        model = IndustrialOwnerDocument
+        fields = ['id', 'document_type', 'document_image', 'uploaded_at', 'is_verified']
+
+class BulkVehicleDocumentSerializer(serializers.Serializer):
+    vehicle_registration = serializers.ImageField()
+    driving_license = serializers.ImageField()
+    identity_proof = serializers.ImageField()
+
+class BulkIndustrialDocumentSerializer(serializers.Serializer):
+    industrial_certificate = serializers.ImageField()
+    industrial_license = serializers.ImageField()
+    identity_proof = serializers.ImageField()

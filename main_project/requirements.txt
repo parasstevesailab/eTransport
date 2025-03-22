@@ -1,7 +1,0 @@
-Django
-djangorestframework
-django-cors-headers
-django-filter
-djangorestframework-simplejwt
-Pillow
-python-dotenv
