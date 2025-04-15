@@ -21,7 +21,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from rest_framework import status
-from .models import CustomUser, VehicleOwnerDocument, IndustrialOwnerDocument
+from .models import CustomUser, VehicleOwnerDocument, IndustrialOwnerDocument, Post,Delivery,DeliveryStatus
 from .serializers import (VehicleOwnerDocumentSerializer, 
                         IndustrialOwnerDocumentSerializer,
                         BulkVehicleDocumentSerializer,
@@ -31,6 +31,8 @@ from rest_framework.parsers import MultiPartParser, FormParser
 from django.core.exceptions import ValidationError
 import imghdr
 from rest_framework.permissions import BasePermission
+from .serializers import PostSerializer
+from django.shortcuts import get_object_or_404
 
 class RegisterView(APIView):
     def post(self, request):
@@ -42,16 +44,21 @@ class RegisterView(APIView):
             user.verification_code = otp
             user.is_verified = False  
             user.save()
-
-            sendMail(
-                emailid=user.email,
-                otp=otp,
-            )
-
-            return Response(
-                {"message": f"{user.get_user_type_display()} registered successfully. Verification email sent."},
-                status=status.HTTP_201_CREATED
-            )
+            success, message = sendMail(
+            emailid=user.email,
+            otp=otp,)
+        
+            if success:
+                return Response(
+                    {"message": f"{user.get_user_type_display()} registered successfully. {message}"},
+                    status=status.HTTP_201_CREATED
+                )
+            else:
+                return Response(
+                    {"error": f"Failed to send verification email: {message}"},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                )
+            
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 class LoginView(APIView):
@@ -112,29 +119,36 @@ class VerifyEmailView(APIView):
 
         if not email or not otp:
             return Response(
-                {"error": "Email and OTP are required."},
+                {"error": "Email and OTP are required"},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
         try:
             user = CustomUser.objects.get(email=email)
-
+            
+            if user.is_verified:
+                return Response(
+                    {"message": "Email is already verified"},
+                    status=status.HTTP_200_OK
+                )
+                
             if str(user.verification_code) == str(otp):
                 user.is_verified = True
-                user.verification_code = None  
+                user.verification_code = None
                 user.save()
+                print(f"Email verified successfully for {email}")
                 return Response(
-                    {"message": "Email verified successfully!"},
+                    {"message": "Email verified successfully"},
                     status=status.HTTP_200_OK
                 )
             else:
                 return Response(
-                    {"error": "Invalid OTP."},
+                    {"error": "Invalid OTP"},
                     status=status.HTTP_400_BAD_REQUEST
                 )
         except CustomUser.DoesNotExist:
             return Response(
-                {"error": "No user found with this email."},
+                {"error": "No user found with this email"},
                 status=status.HTTP_404_NOT_FOUND
             )
         
@@ -473,3 +487,293 @@ class DocumentApprovalView(APIView):
             return Response({"message": "Document approved"}, status=status.HTTP_200_OK)
         except (VehicleOwnerDocument.DoesNotExist, IndustrialOwnerDocument.DoesNotExist):
             return Response({"error": "Document not found"}, status=status.HTTP_404_NOT_FOUND)
+        
+        
+        
+class ResendOTPView(APIView):
+    def post(self, request):
+        email = request.data.get("email")
+        
+        if not email:
+            return Response(
+                {"error": "Email is required"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            user = CustomUser.objects.get(email=email)
+            
+            if user.is_verified:
+                return Response(
+                    {"message": "Email is already verified"},
+                    status=status.HTTP_200_OK
+                )
+            
+            # Generate new OTP
+            otp = random.randint(1000, 9999)
+            user.verification_code = otp
+            user.save()
+            
+            # Send OTP email
+            success, message = sendMail(
+                emailid=user.email,
+                otp=otp,
+            )
+            
+            if success:
+                print(f"OTP resent successfully to {email}")
+                return Response(
+                    {"message": f"OTP resent successfully to {email}"},
+                    status=status.HTTP_200_OK
+                )
+            else:
+                return Response(
+                    {"error": f"Failed to resend OTP: {message}"},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                )
+                
+        except CustomUser.DoesNotExist:
+            return Response(
+                {"error": "No user found with this email"},
+                status=status.HTTP_404_NOT_FOUND
+            )
+            
+            
+class IndustrialOwnerCreatePostView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        """Allow industrial owners to create a delivery post"""
+        user = request.user
+
+        if not user.is_industrial_owner:
+            return Response({"error": "You are not a registered industrial owner."}, status=status.HTTP_403_FORBIDDEN)
+
+        if not user.doc_is_approved:
+            return Response({"error": "Your documents are not verified. Please contact admin."}, status=status.HTTP_403_FORBIDDEN)
+
+        serializer = PostSerializer(data=request.data, context={'request': request})
+        if serializer.is_valid():
+            post = serializer.save(industrial_owner=user)
+            return Response({
+                "message": "Post created successfully",
+                "post": serializer.data,
+                "post_id": post.post_id,
+                "price": post.price,
+                "delivery_deadline": post.delivery_deadline
+            }, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+
+# class PostListView(APIView):
+#     permission_classes = [IsAuthenticated]  # Optional: Only authenticated users can see posts
+
+#     def get(self, request):
+#         """Fetch all active posts with their industrial owner details"""
+#         posts = Post.objects.filter(is_active=True).select_related('industrial_owner')  # Optimize query
+#         serializer = PostSerializer(posts, many=True)
+#         return Response(serializer.data, status=status.HTTP_200_OK)
+    
+
+class VehicleOwnerPostListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+        if not user.is_vehicle_owner or not user.doc_is_approved:
+            return Response({"error": "You are not authorized to view posts."}, status=status.HTTP_403_FORBIDDEN)
+
+        posts = Post.objects.filter(is_active=True, status='open').select_related('industrial_owner')
+        serializer = PostSerializer(posts, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    
+    
+class PostDeleteView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request, post_id):
+        """Delete a specific post if the user is the industrial owner or an admin"""
+        # Get the post or return 404 if not found
+        post = get_object_or_404(Post, post_id=post_id)
+
+        # Check if the user is the industrial owner or an admin
+        user = request.user
+        if not (user.is_staff or user == post.industrial_owner):
+            return Response({"error": "You do not have permission to delete this post."}, status=status.HTTP_403_FORBIDDEN)
+
+        # Delete the post
+        post.delete()
+        return Response({"message": f"Post {post_id} deleted successfully"}, status=status.HTTP_200_OK)
+    
+    
+    
+    
+class PostAcceptView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, post_id):
+        user = request.user
+        if not user.is_vehicle_owner or not user.doc_is_approved:
+            return Response({"error": "You are not authorized to accept posts."}, status=status.HTTP_403_FORBIDDEN)
+
+        post = get_object_or_404(Post, post_id=post_id, is_active=True, status='open')
+        post.accepted_by = user
+        post.status = 'accepted'
+        post.is_active = False  # Mark as no longer available
+        post.save()
+
+        # Optionally create a Delivery instance
+        Delivery.objects.create(post=post, vehicle_owner=user)
+
+        return Response({
+            "message": f"Post {post_id} accepted successfully",
+            "industrial_owner_contact": {
+                "email": post.industrial_owner.email,
+                "contact_no": post.industrial_owner.contact_no
+            }
+        }, status=status.HTTP_200_OK)
+        
+        
+from datetime import datetime
+        
+class DeliveryScheduleView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, post_id):
+        user = request.user
+
+        # Check if post exists at all
+        post = Post.objects.filter(post_id=post_id).first()
+        if not post:
+            return Response({"detail": f"No post found with ID {post_id}."}, status=status.HTTP_404_NOT_FOUND)
+
+        # Check if user accepted the post and status is 'accepted'
+        if post.accepted_by != user:
+            return Response({"detail": "You did not accept this post."}, status=status.HTTP_403_FORBIDDEN)
+        if post.status != 'accepted':
+            return Response({"detail": f"Post status is '{post.status}', not 'accepted'."}, status=status.HTTP_400_BAD_REQUEST)
+
+        if not post.delivery_deadline:
+            return Response({"error": "No delivery deadline set by industrial owner."}, status=status.HTTP_400_BAD_REQUEST)
+
+        delivery_data = request.data
+        pickup_time = delivery_data.get('pickup_time')
+        estimated_delivery_time = delivery_data.get('estimated_delivery_time')
+
+        if not pickup_time or not estimated_delivery_time:
+            return Response({"error": "Pick-up and delivery times are required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            pickup_time = datetime.fromisoformat(pickup_time.replace('Z', '+00:00'))
+            estimated_delivery_time = datetime.fromisoformat(estimated_delivery_time.replace('Z', '+00:00'))
+        except ValueError:
+            return Response({"error": "Invalid datetime format. Use ISO format (e.g., '2024-04-13T10:00:00Z')."}, status=status.HTTP_400_BAD_REQUEST)
+
+        if pickup_time > post.delivery_deadline or estimated_delivery_time > post.delivery_deadline:
+            return Response({"error": "Pick-up and delivery times must be before the deadline."}, status=status.HTTP_400_BAD_REQUEST)
+
+        if pickup_time >= estimated_delivery_time:
+            return Response({"error": "Pick-up time must be before estimated delivery time."}, status=status.HTTP_400_BAD_REQUEST)
+
+        delivery, created = Delivery.objects.get_or_create(post=post)
+        delivery.pickup_time = pickup_time
+        delivery.estimated_delivery_time = estimated_delivery_time
+        delivery.save()
+
+        return Response({"message": "Delivery schedule set successfully"}, status=status.HTTP_200_OK)
+
+    
+    
+    
+class PostCancelAcceptView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request, post_id):
+        """Allow the vehicle owner to cancel their acceptance of a post"""
+        user = request.user
+
+        # Try to find the post with looser filters for debugging
+        post = Post.objects.filter(post_id=post_id).first()
+        if not post:
+            return Response({"detail": f"No post found with ID {post_id}."}, status=status.HTTP_404_NOT_FOUND)
+
+        if not user.is_vehicle_owner or not user.doc_is_approved:
+            return Response({"error": "You are not authorized to cancel this acceptance."}, status=status.HTTP_403_FORBIDDEN)
+
+        if post.accepted_by != user:
+            return Response({"error": "You did not accept this post, so you cannot cancel it."}, status=status.HTTP_403_FORBIDDEN)
+
+        if post.status != 'accepted':
+            return Response({"error": f"Post status is '{post.status}', not 'accepted'. Cannot cancel."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Reset the post
+        post.accepted_by = None
+        post.status = 'open'
+        post.is_active = True
+        post.save()
+
+        # Delete any associated delivery schedule
+        Delivery.objects.filter(post=post).delete()
+
+        return Response({"message": f"Acceptance of post {post_id} cancelled successfully. Post is now open again."}, status=status.HTTP_200_OK)
+    
+    
+from .serializers import PostSerializer, DeliveryStatusSerializer    
+
+class DeliveryStatusListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, post_id):
+        """Fetch all status updates for a specific post"""
+        post = get_object_or_404(Post, post_id=post_id, status='accepted')
+        user = request.user
+
+        # Check if user is involved (vehicle owner or industrial owner)
+        if not (user == post.accepted_by or user == post.industrial_owner):
+            return Response({"error": "You are not authorized to view this status."}, status=status.HTTP_403_FORBIDDEN)
+
+        status_updates = DeliveryStatus.objects.filter(post=post).order_by('timestamp')
+        serializer = DeliveryStatusSerializer(status_updates, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    
+    
+    
+class UpdateDeliveryStatusView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, post_id):
+        """Allow vehicle owner to update delivery status"""
+        user = request.user
+        post = get_object_or_404(Post, post_id=post_id, accepted_by=user, status='accepted')
+
+        if not user.is_vehicle_owner or not user.doc_is_approved:
+            return Response({"error": "You are not authorized to update this status."}, status=status.HTTP_403_FORBIDDEN)
+
+        delivery_status = request.data.get('status')  # Rename 'status' to 'delivery_status'
+        notes = request.data.get('notes', '')
+
+        valid_statuses = ['reached_pickup', 'items_loaded', 'en_route', 'reached_destination', 'items_dropped']
+        if not delivery_status or delivery_status not in valid_statuses:
+            return Response({"error": f"Invalid status. Use: {', '.join(valid_statuses)}."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Create status update
+        DeliveryStatus.objects.create(post=post, vehicle_owner=user, status=delivery_status, notes=notes)
+
+        # Handle payment notifications
+        if delivery_status == 'items_loaded':
+            post.first_payment_made = False
+            post.save()
+            return Response({
+                "message": "Status updated. Industrial owner needs to make first payment.",
+                "payment_due": "half"
+            }, status=status.HTTP_200_OK)
+
+        if delivery_status == 'items_dropped':
+            post.second_payment_made = False
+            post.save()
+            return Response({
+                "message": "Status updated. Industrial owner needs to make second payment.",
+                "payment_due": "half"
+            }, status=status.HTTP_200_OK)
+
+        return Response({"message": f"Status updated to {delivery_status}."}, status=status.HTTP_200_OK)
