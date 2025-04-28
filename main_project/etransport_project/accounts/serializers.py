@@ -64,7 +64,7 @@ class VehicleOwnerSerializer(serializers.ModelSerializer):
         fields = [
             'user_id', 'first_name', 'last_name', 'email', 'contact_no',
             'vehicle_name', 'vehicle_no', 'fleet_size', 'services_offered',
-            'is_vehicle_owner', 'is_approved'
+            'is_vehicle_owner',
         ]
         read_only_fields = ['user_id', 'email', 'is_vehicle_owner', 'is_approved']
 
@@ -73,7 +73,7 @@ class VehicleOwnerSerializer(serializers.ModelSerializer):
 class IndustrialOwnerSerializer(serializers.ModelSerializer):
     class Meta:
         model = CustomUser
-        fields = ['user_id', 'first_name', 'last_name', 'email', 'contact_no', 'company_name', 'company_address', 'company_reg_no', 'designation','is_vehicle_owner', 'is_approved']
+        fields = ['user_id', 'first_name', 'last_name', 'email', 'contact_no', 'company_name', 'company_address', 'company_reg_no', 'designation','is_vehicle_owner']
         read_only_fields = ['user_id', 'email', 'is_vehicle_owner', 'is_approved']  # Optional: Prevent updates to these fields
 
 class ApproveVehicleOwnerSerializer(serializers.ModelSerializer):
