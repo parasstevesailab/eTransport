@@ -25,7 +25,7 @@ def sendMail(emailid, otp, html=""):
         return False, "Invalid email address format"
 
     # Sender email configuration
-    sender_email = "naveenpatidar951@gmail.com"
+    sender_email = "naveenpatidar4513@gmail.com"
     sender_password = "qpfw mlkg whcj qzuu"  # App-specific password
     
     # Create email message

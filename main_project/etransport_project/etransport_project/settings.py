@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.1/ref/settings/
 """
 
+from datetime import timedelta
 from pathlib import Path
 import os
 
@@ -26,7 +27,7 @@ SECRET_KEY = 'django-insecure-p*zg7w(*ewhyvi9t+&=0lmamk-k-73gwtye7vw_)o!&bnn3-%+
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['localhost', '127.0.0.1', '.ngrok-free.app']
 
 
 # Application definition
@@ -49,7 +50,6 @@ REST_FRAMEWORK = {
     ),
 }
 
-from datetime import timedelta
 
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(days=30),   
@@ -74,6 +74,12 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
+
+CORS_ALLOWED_ORIGINS = [
+    'https://abc123.ngrok-free.app', 'https://af12-2405-201-3009-d13a-95b4-fdba-8e63-f1f4.ngrok-free.app/'
+]
+
+CORS_ALLOW_ALL_ORIGINS = True
 
 ROOT_URLCONF = 'etransport_project.urls'
 
@@ -106,16 +112,28 @@ WSGI_APPLICATION = 'etransport_project.wsgi.application'
 #     }
 # }
 
+# DATABASES = {
+#     'default': {
+#         'ENGINE': 'django.db.backends.mysql',
+#         'NAME': 'e_trans',
+#         'USER': 'root',
+#         'PASSWORD': '1234',
+#         'HOST': 'localhost',  # Or your MySQL server's IP address
+#         'PORT': '3306',
+#     }
+# }
+
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.mysql',
-        'NAME': 'e_trans',
-        'USER': 'root',
-        'PASSWORD': '1234',
-        'HOST': 'localhost',  # Or your MySQL server's IP address
-        'PORT': '3306',
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'e_transport',
+        'USER': 'postgres',
+        'PASSWORD': '123456',
+        'HOST': 'localhost',  
+        'PORT': '5432', 
     }
 }
+
 AUTH_USER_MODEL = "accounts.CustomUser"
 
 

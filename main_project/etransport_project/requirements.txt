@@ -5,5 +5,5 @@ django-filter
 djangorestframework-simplejwt
 Pillow
 python-dotenv
-mysqlclient
+# mysqlclient
 
